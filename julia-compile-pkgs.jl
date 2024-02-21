@@ -114,6 +114,7 @@ mutable struct WorkQueue
     const free::Set{WorkItem}
     const done::Set{WorkItem}
     skipped::Int
+    working::Int
     function WorkQueue(pkg_infos)
         item_map = Dict{PkgInfo,WorkItem}()
         function get_work_item(info)
@@ -156,7 +157,7 @@ mutable struct WorkQueue
         for (info, work) in item_map
             push!(work.ndepends == 0 ? free : blocked, work)
         end
-        return new(blocked, free, Set{WorkItem}(), 0)
+        return new(blocked, free, Set{WorkItem}(), 0, 0)
     end
 end
 
@@ -205,12 +206,14 @@ function compile_one(work_queue)
         work_queue.skipped += 1
         @info "Skipping $(work.id) due to dependency failure."
     elseif !compiled
+        work_queue.working += 1
         try
             Base.compilecache(work.id, work.src)
         catch e
             work.failed = true
             @show e
         end
+        work_queue.working -= 1
     else
         work_queue.skipped += 1
         if do_log
@@ -233,8 +236,25 @@ function compile_one(work_queue)
 end
 
 function compile_available(work_queue)
-    while !isempty(work_queue.free)
-        compile_one(work_queue)
+    while !isempty(work_queue.free) || work_queue.working != 0
+        if isempty(work_queue.free)
+            if isempty(work_queue.blocked)
+                return
+            end
+            sleep(0.1)
+        else
+            compile_one(work_queue)
+        end
+    end
+end
+
+function compile_parallel(work_queue, n)
+    tasks = [@task(compile_available(work_queue)) for i in 1:n]
+    for task in tasks
+        schedule(task)
+    end
+    for task in tasks
+        wait(task)
     end
 end
 
@@ -246,8 +266,12 @@ function precompile(work_queue, binpath)
     insert!(Base.DEPOT_PATH, 1, binpath)
     resize!(Base.DEPOT_PATH, 1)
     Core.eval(Base, :(is_interactive = true))
+    nprocess = tryparse(Int, get(ENV, "JULIA_PRECOMPILE_NPROCESS", ""))
+    if nprocess === nothing
+        nprocess = 1
+    end
     try
-        compile_available(work_queue)
+        compile_parallel(work_queue, nprocess)
         @assert isempty(work_queue.free)
         if !isempty(work_queue.blocked)
             @warn "Dependency tracking failed for $([work.id for work in work_queue.blocked])"
