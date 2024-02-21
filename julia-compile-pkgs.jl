@@ -240,15 +240,20 @@ function compile_one(work_queue)
 end
 
 function compile_available(work_queue)
-    while !isempty(work_queue.free) || work_queue.working != 0
-        if isempty(work_queue.free)
-            if isempty(work_queue.blocked)
-                return
+    try
+        while !isempty(work_queue.free) || work_queue.working != 0
+            if isempty(work_queue.free)
+                if isempty(work_queue.blocked)
+                    return
+                end
+                sleep(0.1)
+            else
+                compile_one(work_queue)
             end
-            sleep(0.1)
-        else
-            compile_one(work_queue)
         end
+    catch e
+        @warn "Task failure"
+        @show e
     end
 end
 
