@@ -59,6 +59,17 @@ function pkg_info(stdlib_dir, name, d)
     else
         deps = PkgId[]
     end
+    weakdeps = get(d, "weakdeps", nothing)
+    if weakdeps isa Dict{String, Any}
+        weakdeps = [PkgId(Base.UUID(uuid), name) for (name, uuid) in weakdeps]
+    elseif weakdeps isa Vector{String}
+        weakdeps = [PkgId(uuid_map[name], name) for name in weakdeps]
+    else
+        weakdeps = PkgId[]
+    end
+    # weakdeps needs to be removed from deps
+    # (this is the official behavior probably for backward compatibility reason)
+    setdiff!(deps, weakdeps)
     exts = PkgInfo[]
     extensions = get(d, "extensions", nothing)
     if extensions isa Dict{String,Any}
