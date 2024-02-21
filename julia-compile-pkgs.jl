@@ -125,6 +125,7 @@ mutable struct WorkQueue
                 return item_map[info]
             end
             work = WorkItem(info.id, info.src, 0, WorkItem[], false)
+            dep_works = WorkItem[]
             for dep in info.deps
                 # As of now, extensions are never in the dependencies
                 # so we should be able to find everything
@@ -140,6 +141,9 @@ mutable struct WorkQueue
                 if dep_work === true
                     continue
                 end
+                push!(dep_works, dep_work)
+            end
+            for dep_work in dep_works
                 work.ndepends += 1
                 push!(dep_work.dependents, work)
             end
