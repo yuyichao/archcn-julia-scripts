@@ -106,6 +106,7 @@ mutable struct WorkItem
     const src::String
     ndepends::Int
     const dependents::Vector{WorkItem}
+    failed::Bool
 end
 
 mutable struct WorkQueue
@@ -122,7 +123,7 @@ mutable struct WorkQueue
             if info in keys(item_map)
                 return item_map[info]
             end
-            work = WorkItem(info.id, info.src, 0, WorkItem[])
+            work = WorkItem(info.id, info.src, 0, WorkItem[], false)
             for dep in info.deps
                 # As of now, extensions are never in the dependencies
                 # so we should be able to find everything
@@ -200,10 +201,14 @@ end
 function compile_one(work_queue)
     work = pop!(work_queue.free)
     compiled, do_log = check_already_compiled(work.id)
-    if !compiled
+    if work.failed
+        work_queue.skipped += 1
+        @info "Skipping $(work.id) due to dependency failure."
+    elseif !compiled
         try
             Base.compilecache(work.id, work.src)
         catch e
+            work.failed = true
             @show e
         end
     else
@@ -213,8 +218,10 @@ function compile_one(work_queue)
         end
     end
     push!(work_queue.done, work)
+    failed = work.failed
     for dep_work in work.dependents
         dep_work.ndepends -= 1
+        dep_work.failed |= failed
         if dep_work.ndepends == 0
             delete!(work_queue.blocked, dep_work)
             push!(work_queue.free, dep_work)
