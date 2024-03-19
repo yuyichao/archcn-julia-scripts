@@ -217,10 +217,19 @@ end
 
 function compile_one(work_queue)
     work = pop!(work_queue.free)
-    compiled, do_log = check_already_compiled(work.id)
+    compiled, do_log = try
+        check_already_compiled(work.id)
+    catch e
+        @warn "Error when checking compiled cache for $(work.id):"
+        Base.showerror(stderr, e, catch_backtrace())
+        work.failed = true
+        false, false
+    end
     if work.failed
         work_queue.skipped += 1
-        @info "Skipping $(work.id) due to dependency failure."
+        if do_log
+            @info "Skipping $(work.id) due to dependency failure."
+        end
     elseif !compiled
         work_queue.working += 1
         try
