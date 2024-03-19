@@ -176,7 +176,7 @@ mutable struct WorkQueue
     end
 end
 
-function check_already_compiled(pkg)
+function check_already_compiled(pkg, src)
     entrypath, entryfile = Base.cache_file_entry(pkg)
     path = joinpath(Base.DEPOT_PATH[1], entrypath)
     if !isdir(path)
@@ -192,7 +192,8 @@ function check_already_compiled(pkg)
         if !isfile(filepath)
             continue
         end
-        if Base.isprecompiled(pkg, ignore_loaded=true, cachepaths=[filepath])
+        if Base.isprecompiled(pkg, ignore_loaded=true, sourcepath=src,
+                              cachepaths=[filepath])
             if pkg.uuid === nothing
                 return true, true
             end
@@ -218,7 +219,7 @@ end
 function compile_one(work_queue)
     work = pop!(work_queue.free)
     compiled, do_log = try
-        check_already_compiled(work.id)
+        check_already_compiled(work.id, work.src)
     catch e
         @warn "Error when checking compiled cache for $(work.id):"
         Base.showerror(stderr, e, catch_backtrace())
