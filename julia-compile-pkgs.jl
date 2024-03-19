@@ -205,7 +205,8 @@ function check_already_compiled(pkg)
                     return true, false
                 end
             catch e
-                @warn "Error checking compiled cache for $(pkg): $(e)"
+                @warn "Error checking compiled cache for $(pkg):"
+                Base.showerror(stderr, e, catch_backtrace())
                 return true, true
             end
             return true, true
@@ -226,7 +227,7 @@ function compile_one(work_queue)
             Base.compilecache(work.id, work.src)
         catch e
             work.failed = true
-            @show e
+            Base.showerror(stderr, e, catch_backtrace())
         end
         work_queue.working -= 1
     else
@@ -264,7 +265,7 @@ function compile_available(work_queue)
         end
     catch e
         @warn "Task failure"
-        @show e
+        Base.showerror(stderr, e, catch_backtrace())
     end
 end
 
@@ -297,7 +298,8 @@ function precompile(work_queue, binpath)
             @warn "Dependency tracking failed for $([work.id for work in work_queue.blocked])"
         end
     catch e
-        @warn "Error during precompilation: $e"
+        @warn "Error during precompilation:"
+        Base.showerror(stderr, e, catch_backtrace())
     end
     Core.eval(Base, :(is_interactive = false))
     @info "Done package precompilation"
