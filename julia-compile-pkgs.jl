@@ -15,7 +15,10 @@ end
 function ext_pkg_info(stdlib_dir, parent_pkgid, name, depends)
     id = Base.uuid5(parent_pkgid.uuid, name)
     src = joinpath(stdlib_dir, parent_pkgid.name, "ext", "$name.jl")
-    isfile(src) || return
+    if !isfile(src)
+        src = joinpath(stdlib_dir, parent_pkgid.name, "ext", name, "$name.jl")
+        isfile(src) || return
+    end
     depends = [depends; parent_pkgid]
     return PkgInfo(PkgId(id, name), src, depends, PkgInfo[], parent_pkgid)
 end
