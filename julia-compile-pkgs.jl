@@ -179,6 +179,16 @@ mutable struct WorkQueue
     end
 end
 
+function isprecompiled(pkg, src, cache)
+    @static if isdefined(Base, :compilecache_freshest_path)
+        return compilecache_freshest_path(pkg, ignore_loaded=true,
+                                          sourcepath=src, cachepaths=[cache]) !== nothing
+    else
+        return Base.isprecompiled(pkg, ignore_loaded=true,
+                                  sourcepath=src, cachepaths=[cache])
+    end
+end
+
 function check_already_compiled(pkg, src)
     entrypath, entryfile = Base.cache_file_entry(pkg)
     path = joinpath(Base.DEPOT_PATH[1], entrypath)
@@ -195,8 +205,7 @@ function check_already_compiled(pkg, src)
         if !isfile(filepath)
             continue
         end
-        if Base.isprecompiled(pkg, ignore_loaded=true, sourcepath=src,
-                              cachepaths=[filepath])
+        if isprecompiled(pkg, src, filepath)
             if pkg.uuid === nothing
                 return true, true
             end
