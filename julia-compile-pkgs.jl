@@ -181,8 +181,8 @@ end
 
 function isprecompiled(pkg, src, cache)
     @static if isdefined(Base, :compilecache_freshest_path)
-        return compilecache_freshest_path(pkg, ignore_loaded=true,
-                                          sourcepath=src, cachepaths=[cache]) !== nothing
+        return Base.compilecache_freshest_path(pkg, ignore_loaded=true,
+                                               sourcepath=src, cachepaths=[cache]) !== nothing
     else
         return Base.isprecompiled(pkg, ignore_loaded=true,
                                   sourcepath=src, cachepaths=[cache])
