@@ -4,6 +4,8 @@ const stdlib_dir = get(ENV, "JULIA_PRECOMPILE_STDLIB_DIR", Sys.STDLIB)
 
 const PkgId = Base.PkgId
 
+strpkg(id) = repr("text/plain", id)
+
 struct PkgInfo
     id::PkgId
     src::String
@@ -233,7 +235,7 @@ function compile_one(work_queue)
     compiled, do_log = try
         check_already_compiled(work.id, work.src)
     catch e
-        @warn "Error when checking compiled cache for $(work.id):"
+        @warn "Error when checking compiled cache for $(strpkg(work.id)):"
         Base.showerror(stderr, e, catch_backtrace())
         work.failed = true
         false, false
@@ -241,11 +243,12 @@ function compile_one(work_queue)
     if work.failed
         work_queue.skipped += 1
         if do_log
-            @info "Skipping $(work.id) due to dependency failure."
+            @info "Skipping $(strpkg(work.id)) due to dependency failure."
         end
     elseif !compiled
         work_queue.working += 1
         try
+            @info "Precompiling $(strpkg(work.id))."
             Base.compilecache(work.id, work.src)
         catch e
             work.failed = true
@@ -255,7 +258,7 @@ function compile_one(work_queue)
     else
         work_queue.skipped += 1
         if do_log
-            @info "Not touching compiled cache for $(work.id)"
+            @info "Not touching compiled cache for $(strpkg(work.id))"
         end
     end
     push!(work_queue.done, work)
@@ -317,7 +320,7 @@ function precompile(work_queue, binpath)
         compile_parallel(work_queue, nprocess)
         @assert isempty(work_queue.free)
         if !isempty(work_queue.blocked)
-            @warn "Dependency tracking failed for $([work.id for work in work_queue.blocked])"
+            @warn "Dependency tracking failed for $([strpkg(work.id) for work in work_queue.blocked])"
         end
     catch e
         @warn "Error during precompilation:"
