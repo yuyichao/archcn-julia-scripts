@@ -188,17 +188,23 @@ mutable struct WorkQueue
     end
 end
 
-function isprecompiled(pkg, src, cache)
+function isprecompiled(pkg, src, syntax_ver, cache)
     @static if isdefined(Base, :compilecache_freshest_path)
-        return Base.compilecache_freshest_path(pkg, ignore_loaded=true,
-                                               sourcepath=src, cachepaths=[cache]) !== nothing
+        if has_syntax_ver
+            return Base.compilecache_freshest_path(
+                pkg, ignore_loaded=true, sourcespec=Base.PkgLoadSpec(src, syntax_ver),
+                cachepaths=[cache]) !== nothing
+        else
+            return Base.compilecache_freshest_path(
+                pkg, ignore_loaded=true, sourcepath=src, cachepaths=[cache]) !== nothing
+        end
     else
         return Base.isprecompiled(pkg, ignore_loaded=true,
                                   sourcepath=src, cachepaths=[cache])
     end
 end
 
-function check_already_compiled(pkg, src)
+function check_already_compiled(pkg, src, syntax_ver)
     entrypath, entryfile = Base.cache_file_entry(pkg)
     path = joinpath(Base.DEPOT_PATH[1], entrypath)
     if !isdir(path)
@@ -214,7 +220,7 @@ function check_already_compiled(pkg, src)
         if !isfile(filepath)
             continue
         end
-        if isprecompiled(pkg, src, filepath)
+        if isprecompiled(pkg, src, syntax_ver, filepath)
             if pkg.uuid === nothing
                 return true, true
             end
@@ -240,7 +246,7 @@ end
 function compile_one(work_queue)
     work = pop!(work_queue.free)
     compiled, do_log = try
-        check_already_compiled(work.id, work.src)
+        check_already_compiled(work.id, work.src, work.syntax_ver)
     catch e
         @warn "Error when checking compiled cache for $(strpkg(work.id)):"
         Base.showerror(stderr, e, catch_backtrace())
