@@ -81,7 +81,7 @@ function pkg_info(stdlib_dir, name, d)
     extensions = get(d, "extensions", nothing)
     syntax_ver = VERSION
     if has_syntax_ver
-        syntax_ver = project_get_syntax_version(d)
+        syntax_ver = Base.project_get_syntax_version(d)
     end
     if extensions isa Dict{String,Any}
         for (k, v) in extensions
