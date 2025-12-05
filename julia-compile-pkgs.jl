@@ -3,18 +3,20 @@
 const stdlib_dir = get(ENV, "JULIA_PRECOMPILE_STDLIB_DIR", Sys.STDLIB)
 
 const PkgId = Base.PkgId
+const has_syntax_ver = isdefined(Base, :PkgLoadSpec)
 
 strpkg(id) = repr("text/plain", id)
 
 struct PkgInfo
     id::PkgId
     src::String
+    syntax_ver::VersionNumber
     deps::Vector{PkgId}
     exts::Vector{PkgInfo}
     parent::Union{PkgId,Nothing}
 end
 
-function ext_pkg_info(stdlib_dir, parent_pkgid, name, depends)
+function ext_pkg_info(stdlib_dir, parent_pkgid, syntax_ver, name, depends)
     id = Base.uuid5(parent_pkgid.uuid, name)
     src = joinpath(stdlib_dir, parent_pkgid.name, "ext", "$name.jl")
     if !isfile(src)
@@ -22,7 +24,7 @@ function ext_pkg_info(stdlib_dir, parent_pkgid, name, depends)
         isfile(src) || return
     end
     depends = [depends; parent_pkgid]
-    return PkgInfo(PkgId(id, name), src, depends, PkgInfo[], parent_pkgid)
+    return PkgInfo(PkgId(id, name), src, syntax_ver, depends, PkgInfo[], parent_pkgid)
 end
 
 function try_add_to_uuid_map!(uuid_map, d)
@@ -77,9 +79,13 @@ function pkg_info(stdlib_dir, name, d)
     setdiff!(deps, weakdeps)
     exts = PkgInfo[]
     extensions = get(d, "extensions", nothing)
+    syntax_ver = VERSION
+    if has_syntax_ver
+        syntax_ver = project_get_syntax_version(d)
+    end
     if extensions isa Dict{String,Any}
         for (k, v) in extensions
-            ext_info = ext_pkg_info(stdlib_dir, id, k,
+            ext_info = ext_pkg_info(stdlib_dir, id, syntax_ver, k,
                                     isa(v, AbstractString) ? PkgId(uuid_map[v], v) :
                                         [PkgId(uuid_map[name], name) for name in v])
             if ext_info !== nothing
@@ -87,7 +93,7 @@ function pkg_info(stdlib_dir, name, d)
             end
         end
     end
-    return PkgInfo(id, src, deps, exts, nothing)
+    return PkgInfo(id, src, syntax_ver, deps, exts, nothing)
 end
 
 function load_pkg_info(stdlib_dir)
@@ -120,6 +126,7 @@ end
 mutable struct WorkItem
     const id::PkgId
     const src::String
+    const syntax_ver::VersionNumber
     ndepends::Int
     const dependents::Vector{WorkItem}
     failed::Bool
@@ -140,7 +147,7 @@ mutable struct WorkQueue
             if info in keys(item_map)
                 return item_map[info]
             end
-            work = WorkItem(info.id, info.src, 0, WorkItem[], false)
+            work = WorkItem(info.id, info.src, info.syntax_ver, 0, WorkItem[], false)
             dep_works = WorkItem[]
             for dep in info.deps
                 # As of now, extensions are never in the dependencies
@@ -249,7 +256,11 @@ function compile_one(work_queue)
         work_queue.working += 1
         try
             @info "Precompiling $(strpkg(work.id))."
-            Base.compilecache(work.id, work.src)
+            if has_syntax_ver
+                Base.compilecache(work.id, Base.PkgLoadSpec(work.src, work.syntax_ver))
+            else
+                Base.compilecache(work.id, work.src)
+            end
         catch e
             work.failed = true
             Base.showerror(stderr, e, catch_backtrace())
