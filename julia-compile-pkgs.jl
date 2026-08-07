@@ -138,6 +138,7 @@ mutable struct WorkQueue
     const done::Set{WorkItem}
     skipped::Int
     working::Int
+    failed::Int
     function WorkQueue(pkg_infos)
         item_map = Dict{PkgInfo,WorkItem}()
         function get_work_item(info)
@@ -184,7 +185,7 @@ mutable struct WorkQueue
         for (info, work) in item_map
             push!(work.ndepends == 0 ? free : blocked, work)
         end
-        return new(blocked, free, Set{WorkItem}(), 0, 0)
+        return new(blocked, free, Set{WorkItem}(), 0, 0, 0)
     end
 end
 
@@ -254,7 +255,7 @@ function compile_one(work_queue)
         false, false
     end
     if work.failed
-        work_queue.skipped += 1
+        work_queue.failed += 1
         if do_log
             @info "Skipping $(strpkg(work.id)) due to dependency failure."
         end
@@ -269,6 +270,7 @@ function compile_one(work_queue)
             end
         catch e
             work.failed = true
+            work_queue.failed += 1
             Base.showerror(stderr, e, catch_backtrace())
         end
         work_queue.working -= 1
@@ -289,7 +291,7 @@ function compile_one(work_queue)
         end
     end
     if do_log
-        @info "Finished: $(length(work_queue.done)); Pending: $(length(work_queue.blocked) + length(work_queue.free)); Skipped: $(work_queue.skipped)"
+        @info "Finished: $(length(work_queue.done)); Pending: $(length(work_queue.blocked) + length(work_queue.free)); Skipped: $(work_queue.skipped); Failed: $(work_queue.failed)"
     end
 end
 
